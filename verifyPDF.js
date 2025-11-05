@@ -12,7 +12,7 @@ const {
 } = require('./helpers');
 const { extractCertificatesDetails } = require('./certificateDetails');
 
-const verify = (signature, signedData, signatureMeta) => {
+const verify = (signature, signedData, signatureMeta, customCAs = []) => {
   const message = getMessageFromSignature(signature);
   const {
     certificates,
@@ -55,7 +55,7 @@ const verify = (signature, signedData, signatureMeta) => {
   const integrity = dataDigest === attrDigest;
   const sortedCerts = sortCertificateChain(certificates);
   const parsedCerts = extractCertificatesDetails(sortedCerts);
-  const authenticity = authenticateSignature(sortedCerts);
+  const authenticity = authenticateSignature(sortedCerts, customCAs);
   const expired = isCertsExpired(sortedCerts);
   return ({
     verified: integrity && authenticity && !expired,
@@ -66,14 +66,16 @@ const verify = (signature, signedData, signatureMeta) => {
   });
 };
 
-module.exports = (pdf) => {
+module.exports = (pdf, options = {}) => {
+  const { customCAs = [] } = options;
+  
   const pdfBuffer = preparePDF(pdf);
   checkForSubFilter(pdfBuffer);
   try {
     const { signatureStr, signedData, signatureMeta } = extractSignature(pdfBuffer);
 
     const signatures = signedData.map((signed, index) => {
-      return (verify(signatureStr[index], signed, signatureMeta[index]));
+      return verify(signatureStr[index], signed, signatureMeta[index], customCAs);
     })
 
     return {

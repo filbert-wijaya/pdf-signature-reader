@@ -2,9 +2,12 @@ const tls = require('tls');
 const forge = require('node-forge');
 const rootCAs = require('./rootCAs');
 
-const getRootCAs = () => tls.rootCertificates || rootCAs;
+const getRootCAs = (customCAs = []) => {
+  const defaultCAs = tls.rootCertificates || rootCAs;
+  return [...defaultCAs, ...customCAs];
+};
 
-const verifyRootCert = (chainRootInForgeFormat) => !!getRootCAs()
+const verifyRootCert = (chainRootInForgeFormat, customCAs = []) => !!getRootCAs(customCAs)
   .find((rootCAInPem) => {
     try {
       const rootCAInForgeCert = forge.pki.certificateFromPem(rootCAInPem);
@@ -22,8 +25,14 @@ const isCertsExpired = (certs) => !!certs
   .find(({ validity: { notAfter, notBefore } }) => notAfter.getTime() < Date.now()
   || notBefore.getTime() > Date.now());
 
-const authenticateSignature = (certs) => verifyCaBundle(certs)
-&& verifyRootCert(certs[certs.length - 1]);
+const authenticateSignature = (certs, customCAs = []) => {
+  // Handle self-signed leaf
+  if (certs.length === 1) {
+    const leafPem = forge.pki.certificateToPem(certs[0]);
+    if (customCAs.includes(leafPem)) return true;
+  }
+  verifyCaBundle(certs) && verifyRootCert(certs[certs.length - 1], customCAs)
+};
 
 module.exports = {
   authenticateSignature,
